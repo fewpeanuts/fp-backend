@@ -3,8 +3,15 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon --quiet --exec babel-node server/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon --quiet --exec babel-node server/server.js",
+    "start": "pm2 start server/server.js --name your-app-name --watch",
+    "stop": "pm2 stop your-app-name",
+    "restart": "pm2 restart your-app-name",
+    "delete": "pm2 delete your-app-name",
+    "logs": "pm2 logs your-app-name",
+    "save": "pm2 save",
+    "startup": "pm2 startup && pm2 save",
+    "status": "pm2 status"
   },
   "keywords": [],
   "author": "",
