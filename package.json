@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --quiet --exec babel-node server/server.js",
-    "start": "pm2 start server/server.js --name fp_backend --watch",
+    "start": "pm2 start --interpreter babel-node server/server.js --name fp_backend --watch",
     "stop": "pm2 stop fp_backend",
     "restart": "pm2 restart fp_backend",
     "delete": "pm2 delete fp_backend",
