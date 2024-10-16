@@ -1,10 +1,15 @@
 import express from "express";
 import { authUser, authAdmin } from "../../middleware/auth";
-import { createBusiness, getBusinessList } from "./business";
+import {
+  createBusiness,
+  getBusinessAdminList,
+  getBusinessList,
+} from "./business";
 
 const BusinessRouter = express.Router();
 
-BusinessRouter.post("/create", authAdmin, createBusiness);
+BusinessRouter.post("/admin/create", authAdmin, createBusiness);
+BusinessRouter.get("/admin/list", authAdmin, getBusinessAdminList);
 BusinessRouter.get("/list", getBusinessList);
 
 export default BusinessRouter;

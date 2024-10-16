@@ -159,6 +159,39 @@ export const getAllUserProfile = async (req, res, next) => {
     generateError(err, req, res, next);
   }
 };
+// Admin APIs
+export const adminLogin = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await UserModal.findOne({ email: email });
+    if (!user) return makeResponse(res, 400, "Invalid email or password");
+
+    if (
+      user &&
+      user.type === "admin" &&
+      (await comparePassword(password, user.password))
+    ) {
+      await UserModal.findOneAndUpdate(
+        { email: email },
+        { loginTime: new Date() }
+      );
+      const token = user.generateAuthToken();
+
+      return makeResponse(res, 200, "Success", {
+        id: user?._id,
+        firstName: user?.firstName,
+        lastName: user?.lastName,
+        email: user.email,
+        token,
+      });
+    }
+  } catch (err) {
+    console.log(err);
+    generateError(err, req, res, next);
+  }
+};
+// OTP verification APIs
 export const sendOtp = async (req, res, next) => {
   try {
     const { userId } = req.body;
