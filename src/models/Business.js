@@ -12,6 +12,7 @@ const BusinessSchema = mongoose.Schema(
       required: true,
     },
     createdAt: { type: Date, index: true, default: Date.now() },
+    updatedAt: { type: Date, index: true, default: Date.now() },
   },
   { Collection: "business" }
 );

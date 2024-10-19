@@ -1,33 +1,41 @@
 import { mongoose } from "../db/mongolize";
-import Joi from "joi";
+import Joi, { required } from "joi";
 
 const QuestionSchema = mongoose.Schema({
   questionText: { type: String, required: true, index: true, trim: true },
   questionType: {
     type: String,
-    enum: ["multiple-choice", "yes-no", "open-ended"],
+    enum: ["rating", "yes-no", "open-ended"],
     required: true,
   },
-  choices: {
-    type: [String], //only applicable for multiple-choice questions
+  maxRating: {
+    type: Number,
     required: function () {
-      return this.questionType === "multiple-choice";
+      return this.questionType === "rating";
     },
+    default: 0,
   },
   createdAt: { type: Date, index: true, default: Date.now() },
   updatedAt: { type: Date, index: true, default: Date.now() },
 });
 
+QuestionSchema.set("toJSON", {
+  versionKey: false,
+  virtuals: true,
+  transform: (doc, ret) => {
+    delete ret._id, delete ret._v;
+  },
+});
 const validateQuestion = (question) => {
   const schema = Joi.object({
     questionText: Joi.string().required(),
     questionType: Joi.string()
-      .valid("multiple-choice", "yes-no", "open-ended")
+      .valid("yes-no", "rating", "open-ended")
       .required(),
 
-    choices: Joi.when("questionType", {
-      is: "multiple-choice",
-      then: Joi.array().items(Joi.string()).min(2).required(),
+    maxRating: Joi.when("questionType", {
+      is: "rating",
+      then: Joi.number().integer().min(1).max(10).required(),
       otherwise: Joi.forbidden(),
     }),
   });

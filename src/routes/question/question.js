@@ -16,12 +16,17 @@ export const createQuestion = async (req, res, next) => {
     if (question) return makeResponse(res, 400, "Question already exists");
 
     //add new business to DB
-    question = new QuestionModel(questionParams);
+    question = new QuestionModel({
+      questionText: questionParams.questionText,
+      questionType: questionParams.questionType,
+      maxRating: questionParams.maxRating,
+    });
 
     const data = await question.save();
+
     return makeResponse(res, 201, "Success", {
       msg: "Question created Successfully",
-      id: data?._id,
+      result: data,
     });
   } catch (err) {
     console.log(err);
@@ -31,24 +36,34 @@ export const createQuestion = async (req, res, next) => {
 
 export const getQuestionList = async (req, res, next) => {
   try {
-    const { id, limit, page } = req.query;
+    const { questionText, questionType, limit, page } = req.query;
     const { pageSize, skip } = generatePagination(limit, page);
-    const sortBy = "updateTime";
+    const sortBy = "updatedAt";
 
     const filter = {};
 
-    if (id) filter._id = new ObjectId(id);
+    if (questionText) {
+      filter.questionText = { $regex: questionText, $options: "i" };
+    }
 
-    const data = await QuestionModel.aggregate([
+    if (questionType) {
+      filter.questionType = questionType;
+    }
+
+    const pipeline = [
       {
         $match: filter,
       },
-      { $sort: { [sortBy]: -1 } },
+      { $sort: { [sortBy]: 1 } },
       { $skip: skip },
       { $limit: parseInt(pageSize) },
       { $project: { __v: 0 } },
+    ];
+    const [data, total] = await Promise.all([
+      QuestionModel.aggregate(pipeline),
+      QuestionModel.countDocuments(filter),
     ]);
-    const total = await QuestionModel.countDocuments(filter);
+
     const metadata = generateMetadata(skip, pageSize, total);
     return makeResponse(res, 201, "Success", {
       data,
