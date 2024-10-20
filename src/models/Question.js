@@ -13,7 +13,7 @@ const QuestionSchema = mongoose.Schema({
     required: function () {
       return this.questionType === "rating";
     },
-    default: 0,
+    default: 1,
   },
   createdAt: { type: Date, index: true, default: Date.now() },
   updatedAt: { type: Date, index: true, default: Date.now() },

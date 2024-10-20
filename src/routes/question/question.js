@@ -66,10 +66,50 @@ export const getQuestionList = async (req, res, next) => {
 
     const metadata = generateMetadata(skip, pageSize, total);
     return makeResponse(res, 201, "Success", {
-      data,
+      results: data,
       metadata,
     });
   } catch (err) {
+    console.log(err);
+    generateError(err, req, res, next);
+  }
+};
+
+export const updateQuestion = async (req, res, next) => {
+  try {
+    const { id, questionText, questionType, maxRating } = req.body;
+
+    let question = await QuestionModel.findById({ _id: id });
+    if (!question)
+      return makeResponse(res, 400, "Invalid question id to update");
+
+    const questionParams = {
+      questionText,
+      questionType,
+      maxRating,
+    };
+
+    const { error } = validateQuestion(questionParams);
+    if (error) return makeResponse(res, 400, error.details[0].message);
+
+    const data = await QuestionModel.findByIdAndUpdate(
+      { _id: id },
+      { ...questionParams },
+      { new: true, runValidators: true }
+    );
+    return makeResponse(res, 200, "Success", data);
+  } catch (err) {
+    console.log(err);
+    generateError(err, req, res, next);
+  }
+};
+export const deleteQuestion = async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    const question = await QuestionModel.findByIdAndDelete(id);
+    if (!question) return makeResponse(res, 400, "Invalid business id");
+    return makeResponse(res, 200, "Success", { id });
+  } catch (error) {
     console.log(err);
     generateError(err, req, res, next);
   }
