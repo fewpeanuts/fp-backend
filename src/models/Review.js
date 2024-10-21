@@ -1,6 +1,5 @@
 import { mongoose } from "../db/mongolize";
 import Joi, { required } from "joi";
-import mongoosePaginate from "mongoose-paginate-v2";
 
 const AnswerSchema = mongoose.Schema({
   questionId: {
@@ -57,8 +56,7 @@ ReviewSchema.set("toJSON", {
     delete ret._id, delete ret._v;
   },
 });
-// Add pagination plugin
-ReviewSchema.plugin(mongoosePaginate);
+
 const validateReview = (review) => {
   const schema = Joi.object({
     businessId: Joi.string()
