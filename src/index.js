@@ -11,6 +11,7 @@ import db, { mongoose } from "./db/mongolize";
 import UserRouter from "./routes/user";
 import BusinessRouter from "./routes/business";
 import QuestionRouter from "./routes/question";
+import ReviewRouter from "./routes/reviews";
 
 db();
 const app = express();
@@ -52,6 +53,7 @@ app.get("/health", async (req, res) => {
 app.use("/api/user", UserRouter);
 app.use("/api/business", BusinessRouter);
 app.use("/api/question", QuestionRouter);
+app.use("/api/review", ReviewRouter);
 
 app.use((req, res, next) => {
   if (res.response) {

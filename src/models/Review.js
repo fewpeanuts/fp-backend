@@ -1,5 +1,6 @@
 import { mongoose } from "../db/mongolize";
 import Joi, { required } from "joi";
+import mongoosePaginate from "mongoose-paginate-v2";
 
 const AnswerSchema = mongoose.Schema({
   questionId: {
@@ -7,11 +8,16 @@ const AnswerSchema = mongoose.Schema({
     ref: "Question",
     required: true,
   },
+  questionType: {
+    type: String,
+    enum: ["open-ended", "yes-no", "rating"],
+    required: true,
+  },
   answerText: {
     type: String,
     required: function () {
       return (
-        this.questionType === "open-ender" || this.questionType === "yes-no"
+        this.questionType === "open-ended" || this.questionType === "yes-no"
       );
     },
   },
@@ -44,7 +50,15 @@ const ReviewSchema = mongoose.Schema(
   },
   { Collection: "review" }
 );
-
+ReviewSchema.set("toJSON", {
+  versionKey: false,
+  virtuals: true,
+  transform: (doc, ret) => {
+    delete ret._id, delete ret._v;
+  },
+});
+// Add pagination plugin
+ReviewSchema.plugin(mongoosePaginate);
 const validateReview = (review) => {
   const schema = Joi.object({
     businessId: Joi.string()
@@ -53,11 +67,15 @@ const validateReview = (review) => {
     userId: Joi.string()
       .regex(/^[0-9a-fA-F]{24}$/)
       .required(),
+
     answers: Joi.array()
       .items(
         Joi.object({
           questionId: Joi.string()
             .regex(/^[0-9a-fA-F]{24}$/)
+            .required(),
+          questionType: Joi.string()
+            .valid("open-ended", "yes-no", "rating")
             .required(),
           answerText: Joi.string().when("questionType", {
             is: Joi.valid("open-ended", "yes-no"),
