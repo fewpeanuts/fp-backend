@@ -84,19 +84,6 @@ export const loginUser = async (req, res, next) => {
   }
 };
 
-export const validateToken = async (req, res, next) => {
-  try {
-    const user = req.user;
-    return makeResponse(res, 200, "Success", {
-      msg: "User validated",
-      isValid: true,
-      userId: user.id,
-    });
-  } catch (err) {
-    console.log(err);
-    generateError(err, req, res, next);
-  }
-};
 export const getUserProfile = async (req, res, next) => {
   try {
     const userId = req.user;
@@ -104,7 +91,7 @@ export const getUserProfile = async (req, res, next) => {
     const user = await UserModal.findById({ _id: userId });
     if (!user) return makeResponse(res, 400, "User not found");
     const data = user.toJSON();
-    makeResponse(res, 200, "Success", data);
+    makeResponse(res, 200, "Success", { isValid: true, user: data });
   } catch (err) {
     console.log(err);
     generateError(err, req, res, next);

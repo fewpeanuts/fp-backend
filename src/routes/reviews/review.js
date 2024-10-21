@@ -112,7 +112,7 @@ export const getReviewsListforAdmin = async (req, res, next) => {
       : formatBusinessReviews(formattedReviews, questions, businessId);
 
     const metadata = generateMetadata(page, pageSize, totalResults);
-    return makeResponse(res, 200, "Success", { ...response, metadata });
+    return makeResponse(res, 200, "Success", { reviews: response, metadata });
   } catch (err) {
     console.error(err);
     generateError(err, req, res, next);

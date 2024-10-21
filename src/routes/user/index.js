@@ -6,14 +6,12 @@ import {
   loginUser,
   registerUser,
   sendOtp,
-  validateToken,
   verifyOtp,
   adminLogin,
 } from "./user";
 import { authAdmin, authUser } from "../../middleware/auth";
 
 const UserRouter = express.Router();
-UserRouter.get("/validate-token", authUser, validateToken);
 
 //admin
 UserRouter.post("/admin/login", adminLogin);
@@ -22,7 +20,6 @@ UserRouter.get("/list", authAdmin, getAllUserProfile);
 //user
 UserRouter.post("/register", registerUser);
 UserRouter.post("/login", loginUser);
-
 UserRouter.get("/profile", authUser, getUserProfile);
 UserRouter.get("/profile/:id", authUser, getUserProfileById);
 
