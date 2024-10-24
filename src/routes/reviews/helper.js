@@ -2,13 +2,13 @@ import { ObjectId } from "mongodb";
 
 export const processReviews = (reviews, questions) => {
   const reviewSummary = initializeReviewSummary(questions);
-  console.log(reviewSummary);
+
   reviews.forEach((review) => {
     review.answers.forEach((answer) => {
       updateQuestionSummary(reviewSummary[answer.questionId], answer, review);
     });
   });
-  console.log(reviewSummary);
+
   finalizeReviewSummary(reviewSummary);
   return reviewSummary;
 };

@@ -2,6 +2,7 @@ import makeResponse from "../../utils/response";
 
 import { ReviewModel, validateReview } from "../../models/Review";
 import { QuestionModel } from "../../models/Question";
+import { BusinessModal } from "../../models/Business";
 import { generateError, generateMetadata, generatePagination } from "../utils";
 import {
   buildQery,
@@ -56,16 +57,24 @@ export const getReviewByBusinessId = async (req, res, next) => {
         400,
         "Cannot find a review with given businessId"
       );
-
-    const [reviews, questions] = await Promise.all([
+    console.log(businessId);
+    const [reviews, questions, business] = await Promise.all([
       ReviewModel.find({ businessId }).populate("userId", "firstName lastName"),
       QuestionModel.find(),
+      BusinessModal.findById({ _id: businessId })
+        .select("name industry location")
+        .lean(),
     ]);
 
     let reviewSummary = processReviews(reviews, questions);
 
     return makeResponse(res, 201, "Success", {
       totalReviews: reviews.length,
+      business: {
+        name: business.name,
+        location: business.location,
+        industry: business.industry,
+      },
       reviewSummary,
     });
   } catch (err) {
@@ -74,6 +83,257 @@ export const getReviewByBusinessId = async (req, res, next) => {
   }
 };
 
+export const getAllBusinessReviewList = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10, name, location, industry } = req.query;
+    const { pageSize, skip } = generatePagination(limit, page);
+
+    const searchStage = {
+      $match: { $and: [] },
+    };
+    let lookupStage = {};
+    // Only add search conditions if they are provided
+    if (name || location || industry) {
+      // Add lookup stage at the beginning for business search
+      lookupStage = {
+        $lookup: {
+          from: "businesses",
+          localField: "businessId",
+          foreignField: "_id",
+          as: "business",
+        },
+      };
+      // Add match conditions based on search parameters
+      if (name) {
+        searchStage.$match.$and.push({
+          "business.name": { $regex: name, $options: "i" },
+        });
+      }
+      if (location) {
+        searchStage.$match.$and.push({
+          "business.location": { $regex: location, $options: "i" },
+        });
+      }
+      if (industry) {
+        searchStage.$match.$and.push({
+          "business.industry": { $regex: industry, $options: "i" },
+        });
+      }
+    }
+    const pipeline = [
+      // Add search stages only if there are search conditions
+      ...(searchStage.$match.$and.length > 0 ? [lookupStage, searchStage] : []),
+      // Stage 1: Deconstruct the answers array
+      {
+        $unwind: {
+          path: "$answers",
+          preserveNullAndEmptyArrays: false,
+        },
+      },
+
+      // Stage 2: Look up business details
+      {
+        $lookup: {
+          from: "businesses",
+          localField: "businessId",
+          foreignField: "_id",
+          as: "business",
+        },
+      },
+
+      // Stage 3: Group and calculate statistics
+      {
+        $group: {
+          _id: "$businessId",
+          businessName: { $first: { $arrayElemAt: ["$business.name", 0] } },
+          uniqueReviews: { $addToSet: "$_id" },
+
+          // Track ratings
+          ratings: {
+            $push: {
+              $cond: [
+                { $eq: ["$answers.questionType", "rating"] },
+                "$answers.rating",
+                null,
+              ],
+            },
+          },
+
+          // Track yes/no responses
+          yesNoResponses: {
+            $push: {
+              $cond: [
+                { $eq: ["$answers.questionType", "yes-no"] },
+                { response: "$answers.answerText" },
+                null,
+              ],
+            },
+          },
+
+          // Track open-ended comments with timestamps
+          openEndedComments: {
+            $push: {
+              $cond: [
+                { $eq: ["$answers.questionType", "open-ended"] },
+                {
+                  text: "$answers.answerText",
+                  date: "$submittedAt",
+                },
+                null,
+              ],
+            },
+          },
+        },
+      },
+
+      // Stage 4: Calculate final metrics
+      {
+        $project: {
+          _id: 0,
+          businessId: "$_id",
+          businessName: 1,
+          totalReviews: { $size: "$uniqueReviews" },
+
+          // Calculate average rating
+          averageRating: {
+            $round: [
+              {
+                $avg: {
+                  $filter: {
+                    input: "$ratings",
+                    cond: { $ne: ["$$this", null] },
+                  },
+                },
+              },
+              1,
+            ],
+          },
+
+          // Calculate yes/no percentages
+          yesNoMetrics: {
+            $let: {
+              vars: {
+                validResponses: {
+                  $filter: {
+                    input: "$yesNoResponses",
+                    cond: { $ne: ["$$this", null] },
+                  },
+                },
+              },
+              in: {
+                total: { $size: "$$validResponses" },
+                yesCount: {
+                  $size: {
+                    $filter: {
+                      input: "$$validResponses",
+                      cond: { $eq: ["$$this.response", "yes"] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          // Get latest open-ended comment
+          latestComment: {
+            $arrayElemAt: [
+              {
+                $sortArray: {
+                  input: {
+                    $filter: {
+                      input: "$openEndedComments",
+                      cond: { $ne: ["$$this", null] },
+                    },
+                  },
+                  sortBy: { date: -1 },
+                },
+              },
+              0,
+            ],
+          },
+        },
+      },
+
+      // Stage 5: Format final output
+      {
+        $project: {
+          businessId: 1,
+          businessName: 1,
+          totalReviews: 1,
+          averageRating: 1,
+          yesPercentage: {
+            $round: [
+              {
+                $multiply: [
+                  {
+                    $divide: [
+                      "$yesNoMetrics.yesCount",
+                      { $max: ["$yesNoMetrics.total", 1] },
+                    ],
+                  },
+                  100,
+                ],
+              },
+              1,
+            ],
+          },
+          noPercentage: {
+            $round: [
+              {
+                $multiply: [
+                  {
+                    $divide: [
+                      {
+                        $subtract: [
+                          "$yesNoMetrics.total",
+                          "$yesNoMetrics.yesCount",
+                        ],
+                      },
+                      { $max: ["$yesNoMetrics.total", 1] },
+                    ],
+                  },
+                  100,
+                ],
+              },
+              1,
+            ],
+          },
+          latestOpenEndedComment: "$latestComment.text",
+        },
+      },
+
+      // Stage 6: Sort by review count and paginate data
+      { $sort: { totalReviews: -1 } },
+      { $skip: skip },
+      { $limit: parseInt(pageSize) },
+    ];
+
+    // Add count stage to get total results for pagination
+    const countPipeline = [...pipeline];
+    countPipeline.push({
+      $count: "totalResults",
+    });
+
+    // Execute both pipelines
+    const [reviewStats, countResult] = await Promise.all([
+      ReviewModel.aggregate([
+        ...pipeline,
+        { $sort: { totalReviews: -1 } },
+        { $skip: skip },
+        { $limit: parseInt(pageSize) },
+      ]),
+      ReviewModel.aggregate(countPipeline),
+    ]);
+
+    const totalResults = countResult[0]?.totalResults || 0;
+    const metadata = generateMetadata(page, pageSize, totalResults);
+
+    return makeResponse(res, 201, "Success", { result: reviewStats, metadata });
+  } catch (err) {
+    console.log(err);
+    generateError(err, req, res, next);
+  }
+};
 export const getReviewsListforAdmin = async (req, res, next) => {
   try {
     const {

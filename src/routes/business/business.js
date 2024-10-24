@@ -33,7 +33,7 @@ export const createBusiness = async (req, res, next) => {
 
 export const getBusinessList = async (req, res, next) => {
   try {
-    const { id, name, industry, limit, page } = req.query;
+    const { id, searchText, name, industry, limit, page } = req.query;
     const { pageSize, skip } = generatePagination(limit, page);
     const sortBy = "updatedAt";
 
@@ -42,7 +42,13 @@ export const getBusinessList = async (req, res, next) => {
     if (id) filter._id = new ObjectId(id);
     if (name) filter.name = new RegExp(name, "i");
     if (industry) filter.industry = new RegExp(industry, "i");
-
+    if (searchText) {
+      filter.$or = [
+        { name: new RegExp(searchText.trim(), "i") },
+        { location: new RegExp(searchText.trim(), "i") },
+        { industry: new RegExp(searchText.trim(), "i") },
+      ];
+    }
     const [data, total] = await Promise.all([
       BusinessModal.aggregate([
         {
