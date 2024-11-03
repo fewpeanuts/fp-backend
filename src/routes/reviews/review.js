@@ -57,7 +57,7 @@ export const getReviewByBusinessId = async (req, res, next) => {
         400,
         "Cannot find a review with given businessId"
       );
-    console.log(businessId);
+
     const [reviews, questions, business] = await Promise.all([
       ReviewModel.find({ businessId }).populate("userId", "firstName lastName"),
       QuestionModel.find(),
@@ -71,6 +71,7 @@ export const getReviewByBusinessId = async (req, res, next) => {
     return makeResponse(res, 201, "Success", {
       totalReviews: reviews.length,
       business: {
+        businessId: business._id,
         name: business.name,
         location: business.location,
         industry: business.industry,
@@ -85,7 +86,14 @@ export const getReviewByBusinessId = async (req, res, next) => {
 
 export const getAllBusinessReviewList = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, name, location, industry } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      name,
+      location,
+      industry,
+      minRating,
+    } = req.query;
     const { pageSize, skip } = generatePagination(limit, page);
 
     const searchStage = {
@@ -146,6 +154,13 @@ export const getAllBusinessReviewList = async (req, res, next) => {
         $group: {
           _id: "$businessId",
           businessName: { $first: { $arrayElemAt: ["$business.name", 0] } },
+          businessLocation: {
+            $first: { $arrayElemAt: ["$business.location", 0] },
+          },
+          businessIndustry: {
+            $first: { $arrayElemAt: ["$business.industry", 0] },
+          },
+          helpfulnessVotes: { $push: "$helpfulnessVotes" },
           uniqueReviews: { $addToSet: "$_id" },
 
           // Track ratings
@@ -192,6 +207,8 @@ export const getAllBusinessReviewList = async (req, res, next) => {
           _id: 0,
           businessId: "$_id",
           businessName: 1,
+          businessLocation: 1,
+          businessIndustry: 1,
           totalReviews: { $size: "$uniqueReviews" },
 
           // Calculate average rating
@@ -259,6 +276,8 @@ export const getAllBusinessReviewList = async (req, res, next) => {
         $project: {
           businessId: 1,
           businessName: 1,
+          businessLocation: 1,
+          businessIndustry: 1,
           totalReviews: 1,
           averageRating: 1,
           yesPercentage: {
@@ -306,22 +325,35 @@ export const getAllBusinessReviewList = async (req, res, next) => {
       { $sort: { totalReviews: -1 } },
       { $skip: skip },
       { $limit: parseInt(pageSize) },
+      {
+        $addFields: {
+          debug_helpfulResponses: "$wasThisReviewHelpful",
+        },
+      },
     ];
 
-    // Add count stage to get total results for pagination
-    const countPipeline = [...pipeline];
+    if (minRating) {
+      pipeline.push({
+        $match: {
+          averageRating: { $gte: parseFloat(minRating) },
+        },
+      });
+    }
+    // Add sorting and pagination
+    pipeline.push(
+      { $sort: { totalReviews: -1 } },
+      { $skip: skip },
+      { $limit: parseInt(pageSize) }
+    );
+    // Create count pipeline
+    const countPipeline = pipeline.slice(0, -2); // Remove skip and limit stages
     countPipeline.push({
       $count: "totalResults",
     });
 
     // Execute both pipelines
     const [reviewStats, countResult] = await Promise.all([
-      ReviewModel.aggregate([
-        ...pipeline,
-        { $sort: { totalReviews: -1 } },
-        { $skip: skip },
-        { $limit: parseInt(pageSize) },
-      ]),
+      ReviewModel.aggregate(pipeline),
       ReviewModel.aggregate(countPipeline),
     ]);
 
@@ -334,6 +366,86 @@ export const getAllBusinessReviewList = async (req, res, next) => {
     generateError(err, req, res, next);
   }
 };
+
+export const createVoteForReview = async (req, res, next) => {
+  try {
+    const { voteType } = req.body; // 'like' or 'dislike'
+    const reviewId = req.params.reviewId;
+    const userId = req.user;
+
+    if (!["like", "dislike"].includes(voteType)) {
+      return res.status(400).json({ message: "Invalid vote type" });
+    }
+    const review = await ReviewModel.findById(reviewId);
+    if (!review) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    // Find existing vote by this user
+    const existingVoteIndex = review.helpfulnessVotes.findIndex(
+      (vote) => vote.userId.toString() === userId.toString()
+    );
+
+    if (existingVoteIndex !== -1) {
+      const existingVote = review.helpfulnessVotes[existingVoteIndex];
+
+      if (existingVote.voteType === voteType) {
+        // If clicking the same button again, remove the vote
+        review.helpfulnessVotes.splice(existingVoteIndex, 1);
+      } else {
+        // If clicking different button, update the vote
+        existingVote.voteType = voteType;
+        existingVote.votedAt = new Date();
+      }
+    } else {
+      // Add new vote
+      review.helpfulnessVotes.push({
+        userId,
+        voteType,
+        votedAt: new Date(),
+      });
+    }
+
+    const data = await review.save();
+    return makeResponse(res, 201, "Success", {
+      msg: "Review Vote submitted Successfully",
+      result: data.helpfulnessVotes,
+    });
+  } catch (err) {
+    console.log(err);
+    generateError(err, req, res, next);
+  }
+};
+
+export const getReviewVoteStats = async (req, res, next) => {
+  try {
+    const userId = req.query.userId;
+
+    const review = await ReviewModel.findById(req.params.reviewId);
+    if (!review) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    const stats = {
+      likes: review.helpfulnessVotes.filter((vote) => vote.voteType === "like")
+        .length,
+      dislikes: review.helpfulnessVotes.filter(
+        (vote) => vote.voteType === "dislike"
+      ).length,
+      userVote:
+        review.helpfulnessVotes.find(
+          (vote) => vote.userId.toString() === userId?.toString()
+        )?.voteType || null,
+    };
+    return makeResponse(res, 201, "Success", {
+      result: stats,
+    });
+  } catch (err) {
+    console.log(err);
+    generateError(err, req, res, next);
+  }
+};
+//admin
 export const getReviewsListforAdmin = async (req, res, next) => {
   try {
     const {

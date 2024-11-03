@@ -4,8 +4,24 @@ export const processReviews = (reviews, questions) => {
   const reviewSummary = initializeReviewSummary(questions);
 
   reviews.forEach((review) => {
+    review.reviewId = review._id;
+    const stats = {
+      likes: review.helpfulnessVotes.filter((vote) => vote.voteType === "like")
+        .length,
+      dislikes: review.helpfulnessVotes.filter(
+        (vote) => vote.voteType === "dislike"
+      ).length,
+      userVote: null,
+      reviewId: review._id,
+    };
+
     review.answers.forEach((answer) => {
-      updateQuestionSummary(reviewSummary[answer.questionId], answer, review);
+      updateQuestionSummary(
+        reviewSummary[answer.questionId],
+        answer,
+        review,
+        stats
+      );
     });
   });
 
@@ -29,7 +45,7 @@ const initializeReviewSummary = (questions) => {
   }, {});
 };
 
-const updateQuestionSummary = (summary, answer, review) => {
+const updateQuestionSummary = (summary, answer, review, stats) => {
   switch (summary.questionType) {
     case "yes-no":
       summary[
@@ -45,6 +61,10 @@ const updateQuestionSummary = (summary, answer, review) => {
         response: answer.answerText,
         user: `${review.userId.firstName} ${review.userId.lastName}`,
         submittedAt: review.submittedAt,
+        likes: stats.likes,
+        dislikes: stats.dislikes,
+        userVote: stats.userVote,
+        reviewId: stats.reviewId,
       });
       break;
   }

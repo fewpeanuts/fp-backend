@@ -27,6 +27,23 @@ const AnswerSchema = mongoose.Schema({
     },
   },
 });
+// Add this schema before ReviewSchema
+const HelpfulnessVoteSchema = mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  voteType: {
+    type: String,
+    enum: ["like", "dislike", null],
+    default: null,
+  },
+  votedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
 
 const ReviewSchema = mongoose.Schema(
   {
@@ -42,6 +59,7 @@ const ReviewSchema = mongoose.Schema(
     },
 
     answers: [AnswerSchema],
+    helpfulnessVotes: [HelpfulnessVoteSchema],
     submittedAt: {
       type: Date,
       default: Date.now,

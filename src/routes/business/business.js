@@ -8,6 +8,7 @@ export const createBusiness = async (req, res, next) => {
     const businessParams = req.body;
     const userId = req.user;
     businessParams.createdBy = userId;
+    businessParams.status = true;
 
     const { error } = validateBusiness(businessParams, { abortEarly: false });
     if (error) return makeResponse(res, 400, error.details[0].message);
@@ -143,16 +144,17 @@ export const getBusinessAdminList = async (req, res, next) => {
 
 export const updateBusiness = async (req, res, next) => {
   try {
-    const { id, name, industry, location } = req.body;
+    const { id, name, industry, location, status } = req.body;
 
     let business = await BusinessModal.findById({ _id: id });
     if (!business)
       return makeResponse(res, 400, "Invalid business id to update");
 
     const businessParams = {
-      name,
-      industry,
-      location,
+      name: name ? name : business.name,
+      industry: industry ? industry : business.industry,
+      location: location ? location : business.location,
+      status: status ? status : business.status,
       createdBy: String(business.createdBy),
     };
 

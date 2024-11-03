@@ -11,7 +11,7 @@ const QuestionRouter = express.Router();
 
 QuestionRouter.post("/admin/create", authAdmin, createQuestion);
 QuestionRouter.put("/admin/update", authAdmin, updateQuestion);
-QuestionRouter.get("/admin/list", authAdmin, getQuestionList);
+QuestionRouter.get("/list", authUser, getQuestionList);
 QuestionRouter.delete("/admin/delete/:id", authAdmin, deleteQuestion);
 
 export default QuestionRouter;

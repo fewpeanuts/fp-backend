@@ -11,6 +11,7 @@ const BusinessSchema = mongoose.Schema(
       ref: "User",
       required: true,
     },
+    status: { type: Boolean, index: true, default: true },
     createdAt: { type: Date, index: true, default: Date.now() },
     updatedAt: { type: Date, index: true, default: Date.now() },
   },
@@ -30,6 +31,7 @@ const validateBusiness = (business) => {
     name: Joi.string().min(3).required(),
     industry: Joi.string().min(3).required(),
     location: Joi.string().min(3).required(),
+    status: Joi.boolean(),
     createdBy: Joi.string()
       .regex(/^[0-9a-fA-F]{24}$/) // Valid ObjectId
       .required(),
