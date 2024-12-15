@@ -14,11 +14,16 @@ export const createBusiness = async (req, res, next) => {
     if (error) return makeResponse(res, 400, error.details[0].message);
 
     let business = await BusinessModal.findOne({
-      name: businessParams.name,
+      placeId: businessParams?.placeId,
     }).lean();
-    if (business) return makeResponse(res, 400, "Business Name already exists");
 
-    //add new business to DB
+    if (business) {
+      return makeResponse(
+        res,
+        400,
+        "Business with same place id already exist"
+      );
+    }
     business = new BusinessModal(businessParams);
 
     const { _id } = await business.save();

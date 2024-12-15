@@ -8,6 +8,7 @@ import {
   sendOtp,
   verifyOtp,
   adminLogin,
+  updateUser,
 } from "./user";
 import { authAdmin, authUser } from "../../middleware/auth";
 
@@ -22,6 +23,7 @@ UserRouter.post("/register", registerUser);
 UserRouter.post("/login", loginUser);
 UserRouter.get("/profile", authUser, getUserProfile);
 UserRouter.get("/profile/:id", authUser, getUserProfileById);
+UserRouter.put("/profile/update", authUser, updateUser);
 
 //OTP
 UserRouter.post("/verifyOtp", verifyOtp);

@@ -29,16 +29,16 @@ export const registerUser = async (req, res, next) => {
     const data = await user.save();
 
     //generate OTP
-    const otp = generateOtp();
-    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+    // const otp = generateOtp();
+    // const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
     // Save OTP in the OTP collection
-    await OtpModal.create({ userId: user._id, otp, expiresAt: otpExpiry });
+    // await OtpModal.create({ userId: user._id, otp, expiresAt: otpExpiry });
 
     // Send OTP via email
     // await sendEmail(email, otp);
 
     return makeResponse(res, 201, "Success", {
-      msg: "User registered and Otp sent successfully",
+      msg: "User registered successfully",
       results: [{ userId: data?._id }],
     });
   } catch (err) {
@@ -55,10 +55,13 @@ export const loginUser = async (req, res, next) => {
 
     if (!user) return makeResponse(res, 400, "Invalid email or password");
 
-    if (!user.emailVerified) {
-      makeResponse(res, 400, "Please verify your email id first");
-    }
-    if (user && (await comparePassword(password, user.password))) {
+    // if (!user.emailVerified) {
+    //   makeResponse(res, 400, "Please verify your email id first");
+    // }
+    const confirmPassword = await comparePassword(password, user.password);
+    if (!confirmPassword) makeResponse(res, 400, "Invalid Password");
+
+    if (user && confirmPassword) {
       await UserModal.findOneAndUpdate(
         { email: email },
         { lastLogin: new Date() }
@@ -141,6 +144,31 @@ export const getAllUserProfile = async (req, res, next) => {
     const metadata = generateMetadata(skip, pageSize, total);
 
     makeResponse(res, 200, "Success", { data, metadata });
+  } catch (err) {
+    console.log(err);
+    generateError(err, req, res, next);
+  }
+};
+export const updateUser = async (req, res, next) => {
+  try {
+    const userParams = req.body;
+    console.log(userParams);
+    let user = await UserModal.findById({ _id: userParams.id });
+    console.log(user);
+    if (!user) return makeResponse(res, 400, "User does not exists ");
+
+    //update user to DB
+    userParams.updateTime = Date.now();
+    const data = await UserModal.findByIdAndUpdate(
+      { _id: user._id },
+      userParams,
+      { new: true }
+    );
+
+    return makeResponse(res, 201, "Success", {
+      msg: "User updated successfully",
+      data,
+    });
   } catch (err) {
     console.log(err);
     generateError(err, req, res, next);

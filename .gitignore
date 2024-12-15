@@ -2,3 +2,6 @@ node_modules
 config/.env
 
 .DS_store
+
+businesses.json
+script.js
