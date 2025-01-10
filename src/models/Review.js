@@ -60,6 +60,10 @@ const ReviewSchema = mongoose.Schema(
 
     answers: [AnswerSchema],
     helpfulnessVotes: [HelpfulnessVoteSchema],
+    isAnonymous: {
+      type: Boolean,
+      default: false,
+    },
     submittedAt: {
       type: Date,
       default: Date.now,
@@ -83,7 +87,7 @@ const validateReview = (review) => {
     userId: Joi.string()
       .regex(/^[0-9a-fA-F]{24}$/)
       .required(),
-
+    isAnonymous: Joi.boolean().default(false),
     answers: Joi.array()
       .items(
         Joi.object({

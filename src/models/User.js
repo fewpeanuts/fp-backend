@@ -28,6 +28,9 @@ const UserSchema = mongoose.Schema(
     phoneVerified: { type: Boolean, default: false },
     type: { type: String, index: true, default: "user" },
 
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date },
+
     createdAt: { type: Date, index: true, default: Date.now() },
     updatedAt: { type: Date, index: true, default: Date.now() },
     lastLogin: { type: Date },

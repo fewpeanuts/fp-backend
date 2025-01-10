@@ -149,29 +149,43 @@ export const getBusinessAdminList = async (req, res, next) => {
 
 export const updateBusiness = async (req, res, next) => {
   try {
-    const { id, name, industry, location, status } = req.body;
+    const { id, name, industry, location, status, placeId } = req.body;
 
-    let business = await BusinessModal.findById({ _id: id });
-    if (!business)
-      return makeResponse(res, 400, "Invalid business id to update");
+    let business = await BusinessModal.findOne({ placeId: placeId });
+    console.log(business?.location, business?.placeId, "\n");
 
+    // if (!business)
+    //   return makeResponse(res, 400, "Invalid business id to update");
     const businessParams = {
-      name: name ? name : business.name,
-      industry: industry ? industry : business.industry,
-      location: location ? location : business.location,
-      status: status ? status : business.status,
-      createdBy: String(business.createdBy),
+      name: name ? name : business?.name,
+      industry: industry ? industry : business?.industry,
+      location: location ? location : business?.location,
+      // status: status ? status : business?.status,
+      status: true,
+      placeId: placeId,
+      createdBy: "670c05b90d7bd1b566b7f5fd" || String(business?.createdBy),
     };
 
-    const { error } = validateBusiness(businessParams);
-    if (error) return makeResponse(res, 400, error.details[0].message);
+    if (!business) {
+      business = new BusinessModal({
+        ...businessParams,
+        createdAt: Date.now(),
+      });
 
-    const data = await BusinessModal.findByIdAndUpdate(
-      { _id: id },
-      { ...businessParams, updatedAt: Date.now() },
-      { new: true, runValidators: true }
-    );
-    return makeResponse(res, 200, "Success", data);
+      await business.save();
+      return makeResponse(res, 201, "Business created successfully", business);
+    } else {
+      const data = await BusinessModal.findByIdAndUpdate(
+        { _id: business._id },
+        { ...businessParams, updatedAt: Date.now() },
+        { new: true, runValidators: true }
+      );
+      return makeResponse(res, 200, "Success", data);
+    }
+
+    // const { error } = validateBusiness(businessParams);
+    // console.log("error=>", error);
+    // if (error) return makeResponse(res, 400, error.details[0].message);
   } catch (err) {
     console.log(err);
     generateError(err, req, res, next);

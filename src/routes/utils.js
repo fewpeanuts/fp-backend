@@ -9,6 +9,7 @@ import {
 } from "../utils/errors";
 import logger from "../utils/logging";
 import bcrypt from "bcryptjs";
+import nodemailer from "nodemailer";
 
 export const generateError = (err, req, res, next, _) => {
   logger.error("request id: " + req.requestId + " error: " + err);
@@ -111,4 +112,34 @@ export const generateReferralCode = () => {
 //6-digit OTP
 export const generateOtp = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+//send email
+let nodeConfig = {
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // true for 465, false for other ports
+  auth: {
+    user: process.env.EMAIL, // generated ethereal user
+    pass: process.env.EMAIL_PASS, // generated ethereal password
+  },
+};
+let transporter = nodemailer.createTransport(nodeConfig);
+
+export const sendEmail = async (data) => {
+  try {
+    let message = {
+      from: process.env.EMAIL,
+      to: data.to,
+      subject: subject || `Few Peanuts`,
+      html: data.message,
+    };
+
+    //send email
+    await transporter.sendMail(message);
+    return true;
+  } catch (err) {
+    console.log("email err", err);
+    return err;
+  }
 };

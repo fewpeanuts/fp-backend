@@ -35,6 +35,7 @@ export const createReview = async (req, res, next) => {
     let review = await new ReviewModel({
       businessId: responseParams.businessId,
       userId: responseParams.userId, // Assuming the auth middleware adds user to req
+      isAnonymous: responseParams.isAnonymous || false,
       answers: responseParams.answers,
     }).save();
 
@@ -65,7 +66,7 @@ export const getReviewByBusinessId = async (req, res, next) => {
         .select("name industry location")
         .lean(),
     ]);
-
+    // console.log(reviews);
     let reviewSummary = processReviews(reviews, questions);
 
     return makeResponse(res, 201, "Success", {

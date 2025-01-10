@@ -13,6 +13,7 @@ export const processReviews = (reviews, questions) => {
       ).length,
       userVote: null,
       reviewId: review._id,
+      isAnonymous: review.isAnonymous,
     };
 
     review.answers.forEach((answer) => {
@@ -46,6 +47,7 @@ const initializeReviewSummary = (questions) => {
 };
 
 const updateQuestionSummary = (summary, answer, review, stats) => {
+  console.log(review);
   switch (summary.questionType) {
     case "yes-no":
       summary[
@@ -59,7 +61,9 @@ const updateQuestionSummary = (summary, answer, review, stats) => {
     case "open-ended":
       summary.openEndedResponses.push({
         response: answer.answerText,
-        user: `${review.userId.firstName} ${review.userId.lastName}`,
+        user: review?.isAnonymous
+          ? "Anonymous"
+          : `${review.userId.firstName} ${review.userId.lastName}`,
         submittedAt: review.submittedAt,
         likes: stats.likes,
         dislikes: stats.dislikes,

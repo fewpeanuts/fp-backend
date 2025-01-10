@@ -2,6 +2,7 @@ import makeResponse from "../../utils/response";
 import { ObjectId } from "mongodb";
 import { UserModal, validateUser } from "../../models/User";
 import { OtpModal } from "../../models/Otp";
+
 import {
   comparePassword,
   generateError,
@@ -76,6 +77,8 @@ export const loginUser = async (req, res, next) => {
             firstName: user?.firstName,
             lastName: user?.lastName,
             email: user?.email,
+            organization: user?.organization || "",
+            bio: user?.bio || "",
             token,
           },
         ],
@@ -152,7 +155,7 @@ export const getAllUserProfile = async (req, res, next) => {
 export const updateUser = async (req, res, next) => {
   try {
     const userParams = req.body;
-    console.log(userParams);
+
     let user = await UserModal.findById({ _id: userParams.id });
     console.log(user);
     if (!user) return makeResponse(res, 400, "User does not exists ");
