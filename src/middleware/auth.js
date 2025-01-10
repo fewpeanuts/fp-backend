@@ -7,7 +7,7 @@ import { generateError } from "../routes/utils";
 export const authUser = (req, res, next) => {
   try {
     let token = req.headers["authorization"];
-    // console.log("token", token);
+
     if (token && token.startsWith("Bearer")) {
       const splitToken = token.split(" ");
       const decode = jwt.verify(splitToken[1], process.env.JWT_PRIVATE_KEY);

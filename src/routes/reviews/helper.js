@@ -47,7 +47,6 @@ const initializeReviewSummary = (questions) => {
 };
 
 const updateQuestionSummary = (summary, answer, review, stats) => {
-  console.log(review);
   switch (summary.questionType) {
     case "yes-no":
       summary[
