@@ -84,7 +84,6 @@ export const getReviewByBusinessId = async (req, res, next) => {
     generateError(err, req, res, next);
   }
 };
-
 export const getAllBusinessReviewList = async (req, res, next) => {
   try {
     const {
@@ -97,183 +96,350 @@ export const getAllBusinessReviewList = async (req, res, next) => {
     } = req.query;
     const { pageSize, skip } = generatePagination(limit, page);
 
-    const searchStage = {
-      $match: { $and: [] },
-    };
-    let lookupStage = {};
-    // Only add search conditions if they are provided
-    if (name || location || industry) {
-      // Add lookup stage at the beginning for business search
-      lookupStage = {
-        $lookup: {
-          from: "businesses",
-          localField: "businessId",
-          foreignField: "_id",
-          as: "business",
-        },
+    const hasFilters = Boolean(name || location || industry);
+
+    if (hasFilters) {
+      // First get all matching businesses
+      const businessMatch = {
+        ...(name && { name: { $regex: name, $options: "i" } }),
+        ...(location && { location: { $regex: location, $options: "i" } }),
+        ...(industry && { industry: { $regex: industry, $options: "i" } }),
       };
-      // Add match conditions based on search parameters
-      if (name) {
-        searchStage.$match.$and.push({
-          "business.name": { $regex: name, $options: "i" },
-        });
-      }
-      if (location) {
-        searchStage.$match.$and.push({
-          "business.location": { $regex: location, $options: "i" },
-        });
-      }
-      if (industry) {
-        searchStage.$match.$and.push({
-          "business.industry": { $regex: industry, $options: "i" },
-        });
-      }
-    }
-    const pipeline = [
-      // Add search stages only if there are search conditions
-      ...(searchStage.$match.$and.length > 0 ? [lookupStage, searchStage] : []),
-      // Stage 1: Deconstruct the answers array
-      {
-        $unwind: {
-          path: "$answers",
-          preserveNullAndEmptyArrays: false,
-        },
-      },
 
-      // Stage 2: Look up business details
-      {
-        $lookup: {
-          from: "businesses",
-          localField: "businessId",
-          foreignField: "_id",
-          as: "business",
-        },
-      },
-
-      // Stage 3: Group and calculate statistics
-      {
-        $group: {
-          _id: "$businessId",
-          businessName: { $first: { $arrayElemAt: ["$business.name", 0] } },
-          businessLocation: {
-            $first: { $arrayElemAt: ["$business.location", 0] },
-          },
-          businessIndustry: {
-            $first: { $arrayElemAt: ["$business.industry", 0] },
-          },
-          helpfulnessVotes: { $push: "$helpfulnessVotes" },
-          uniqueReviews: { $addToSet: "$_id" },
-
-          // Track ratings
-          ratings: {
-            $push: {
-              $cond: [
-                { $eq: ["$answers.questionType", "rating"] },
-                "$answers.rating",
-                null,
-              ],
-            },
-          },
-
-          // Track yes/no responses
-          yesNoResponses: {
-            $push: {
-              $cond: [
-                { $eq: ["$answers.questionType", "yes-no"] },
-                { response: "$answers.answerText" },
-                null,
-              ],
-            },
-          },
-
-          // Track open-ended comments with timestamps
-          openEndedComments: {
-            $push: {
-              $cond: [
-                { $eq: ["$answers.questionType", "open-ended"] },
-                {
-                  text: "$answers.answerText",
-                  date: "$submittedAt",
-                },
-                null,
-              ],
-            },
+      // Get matching businesses
+      const businessPipeline = [
+        { $match: businessMatch },
+        {
+          $lookup: {
+            from: "reviews",
+            localField: "_id",
+            foreignField: "businessId",
+            as: "reviews",
           },
         },
-      },
-
-      // Stage 4: Calculate final metrics
-      {
-        $project: {
-          _id: 0,
-          businessId: "$_id",
-          businessName: 1,
-          businessLocation: 1,
-          businessIndustry: 1,
-          totalReviews: { $size: "$uniqueReviews" },
-
-          // Calculate average rating
-          averageRating: {
-            $round: [
+        {
+          $project: {
+            _id: 1,
+            businessId: "$_id",
+            businessName: "$name",
+            businessLocation: "$location",
+            businessIndustry: "$industry",
+            hasReviews: { $gt: [{ $size: "$reviews" }, 0] },
+            totalReviews: { $size: "$reviews" },
+          },
+        },
+        // Add rating filter if specified
+        ...(minRating
+          ? [
               {
-                $avg: {
-                  $filter: {
-                    input: "$ratings",
-                    cond: { $ne: ["$$this", null] },
-                  },
+                $match: {
+                  hasReviews: true, // Only filter ratings for businesses with reviews
+                  "reviews.rating": { $gte: parseFloat(minRating) },
                 },
               },
-              1,
-            ],
-          },
+            ]
+          : []),
+        { $sort: { totalReviews: -1 } },
+        { $skip: skip },
+        { $limit: parseInt(pageSize) },
+      ];
 
-          // Calculate yes/no percentages
-          yesNoMetrics: {
-            $let: {
-              vars: {
-                validResponses: {
-                  $filter: {
-                    input: "$yesNoResponses",
-                    cond: { $ne: ["$$this", null] },
-                  },
+      // Get businesses with basic info
+      const businesses = await BusinessModal.aggregate(businessPipeline);
+
+      // For businesses with reviews, get detailed review stats
+      const businessesWithReviews = businesses.filter((b) => b.hasReviews);
+      let reviewStats = [];
+
+      if (businessesWithReviews.length > 0) {
+        const reviewPipeline = [
+          {
+            $match: {
+              businessId: {
+                $in: businessesWithReviews.map((b) => b.businessId),
+              },
+            },
+          },
+          {
+            $unwind: {
+              path: "$answers",
+              preserveNullAndEmptyArrays: false,
+            },
+          },
+          {
+            $group: {
+              _id: "$businessId",
+              ratings: {
+                $push: {
+                  $cond: [
+                    { $eq: ["$answers.questionType", "rating"] },
+                    "$answers.rating",
+                    null,
+                  ],
                 },
               },
-              in: {
-                total: { $size: "$$validResponses" },
-                yesCount: {
-                  $size: {
-                    $filter: {
-                      input: "$$validResponses",
-                      cond: { $eq: ["$$this.response", "yes"] },
+              yesNoResponses: {
+                $push: {
+                  $cond: [
+                    { $eq: ["$answers.questionType", "yes-no"] },
+                    "$answers.answerText",
+                    null,
+                  ],
+                },
+              },
+              openEndedComments: {
+                $push: {
+                  $cond: [
+                    { $eq: ["$answers.questionType", "open-ended"] },
+                    {
+                      text: "$answers.answerText",
+                      date: "$submittedAt",
+                    },
+                    null,
+                  ],
+                },
+              },
+            },
+          },
+          {
+            $project: {
+              averageRating: {
+                $round: [
+                  {
+                    $avg: {
+                      $filter: {
+                        input: "$ratings",
+                        cond: { $ne: ["$$this", null] },
+                      },
+                    },
+                  },
+                  1,
+                ],
+              },
+              yesNoMetrics: {
+                $let: {
+                  vars: {
+                    validResponses: {
+                      $filter: {
+                        input: "$yesNoResponses",
+                        cond: { $ne: ["$$this", null] },
+                      },
+                    },
+                  },
+                  in: {
+                    total: { $size: "$$validResponses" },
+                    yesCount: {
+                      $size: {
+                        $filter: {
+                          input: "$$validResponses",
+                          cond: { $eq: ["$$this", "yes"] },
+                        },
+                      },
                     },
                   },
                 },
               },
+              latestComment: {
+                $arrayElemAt: [
+                  {
+                    $sortArray: {
+                      input: {
+                        $filter: {
+                          input: "$openEndedComments",
+                          cond: { $ne: ["$$this", null] },
+                        },
+                      },
+                      sortBy: { date: -1 },
+                    },
+                  },
+                  0,
+                ],
+              },
             },
           },
+        ];
 
-          // Get latest open-ended comment
-          latestComment: {
-            $arrayElemAt: [
-              {
-                $sortArray: {
-                  input: {
+        reviewStats = await ReviewModel.aggregate(reviewPipeline);
+      }
+
+      // Combine business info with review stats
+      const result = businesses.map((business) => {
+        const reviewStat = reviewStats.find(
+          (stat) => stat._id.toString() === business.businessId.toString()
+        );
+
+        return {
+          businessId: business.businessId,
+          businessName: business.businessName,
+          businessLocation: business.businessLocation,
+          businessIndustry: business.businessIndustry,
+          totalReviews: business.totalReviews,
+          ...(reviewStat
+            ? {
+                averageRating: reviewStat.averageRating,
+                yesPercentage: reviewStat.yesNoMetrics
+                  ? Math.round(
+                      (reviewStat.yesNoMetrics.yesCount /
+                        reviewStat.yesNoMetrics.total) *
+                        100
+                    )
+                  : 0,
+                noPercentage: reviewStat.yesNoMetrics
+                  ? Math.round(
+                      ((reviewStat.yesNoMetrics.total -
+                        reviewStat.yesNoMetrics.yesCount) /
+                        reviewStat.yesNoMetrics.total) *
+                        100
+                    )
+                  : 0,
+                latestOpenEndedComment: reviewStat.latestComment?.text || null,
+              }
+            : {
+                averageRating: 0,
+                yesPercentage: 0,
+                noPercentage: 0,
+                latestOpenEndedComment: null,
+              }),
+        };
+      });
+
+      // Get total count for pagination
+      const totalResults = await BusinessModal.countDocuments(businessMatch);
+      const metadata = generateMetadata(page, pageSize, totalResults);
+
+      return makeResponse(res, 201, "Success", { result, metadata });
+    } else {
+      // When no filters are present, only show businesses with reviews
+      const pipeline = [
+        {
+          $lookup: {
+            from: "businesses",
+            localField: "businessId",
+            foreignField: "_id",
+            as: "business",
+          },
+        },
+        {
+          $unwind: {
+            path: "$answers",
+            preserveNullAndEmptyArrays: false,
+          },
+        },
+        {
+          $group: {
+            _id: "$businessId",
+            businessName: { $first: { $arrayElemAt: ["$business.name", 0] } },
+            businessLocation: {
+              $first: { $arrayElemAt: ["$business.location", 0] },
+            },
+            businessIndustry: {
+              $first: { $arrayElemAt: ["$business.industry", 0] },
+            },
+            totalReviews: { $addToSet: "$_id" },
+            ratings: {
+              $push: {
+                $cond: [
+                  { $eq: ["$answers.questionType", "rating"] },
+                  "$answers.rating",
+                  null,
+                ],
+              },
+            },
+            yesNoResponses: {
+              $push: {
+                $cond: [
+                  { $eq: ["$answers.questionType", "yes-no"] },
+                  "$answers.answerText",
+                  null,
+                ],
+              },
+            },
+            openEndedComments: {
+              $push: {
+                $cond: [
+                  { $eq: ["$answers.questionType", "open-ended"] },
+                  {
+                    text: "$answers.answerText",
+                    date: "$submittedAt",
+                  },
+                  null,
+                ],
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            businessId: "$_id",
+            businessName: 1,
+            businessLocation: 1,
+            businessIndustry: 1,
+            totalReviews: { $size: "$totalReviews" },
+            averageRating: {
+              $round: [
+                {
+                  $avg: {
                     $filter: {
-                      input: "$openEndedComments",
+                      input: "$ratings",
                       cond: { $ne: ["$$this", null] },
                     },
                   },
-                  sortBy: { date: -1 },
+                },
+                1,
+              ],
+            },
+            yesNoMetrics: {
+              $let: {
+                vars: {
+                  validResponses: {
+                    $filter: {
+                      input: "$yesNoResponses",
+                      cond: { $ne: ["$$this", null] },
+                    },
+                  },
+                },
+                in: {
+                  total: { $size: "$$validResponses" },
+                  yesCount: {
+                    $size: {
+                      $filter: {
+                        input: "$$validResponses",
+                        cond: { $eq: ["$$this", "yes"] },
+                      },
+                    },
+                  },
                 },
               },
-              0,
-            ],
+            },
+            latestComment: {
+              $arrayElemAt: [
+                {
+                  $sortArray: {
+                    input: {
+                      $filter: {
+                        input: "$openEndedComments",
+                        cond: { $ne: ["$$this", null] },
+                      },
+                    },
+                    sortBy: { date: -1 },
+                  },
+                },
+                0,
+              ],
+            },
           },
         },
-      },
+      ];
 
-      // Stage 5: Format final output
-      {
+      if (minRating) {
+        pipeline.push({
+          $match: {
+            averageRating: { $gte: parseFloat(minRating) },
+          },
+        });
+      }
+
+      pipeline.push({
         $project: {
           businessId: 1,
           businessName: 1,
@@ -320,48 +486,31 @@ export const getAllBusinessReviewList = async (req, res, next) => {
           },
           latestOpenEndedComment: "$latestComment.text",
         },
-      },
+      });
 
-      // Stage 6: Sort by review count and paginate data
-      { $sort: { totalReviews: -1 } },
-      { $skip: skip },
-      { $limit: parseInt(pageSize) },
-      {
-        $addFields: {
-          debug_helpfulResponses: "$wasThisReviewHelpful",
-        },
-      },
-    ];
+      pipeline.push(
+        { $sort: { totalReviews: -1 } },
+        { $skip: skip },
+        { $limit: parseInt(pageSize) }
+      );
 
-    if (minRating) {
-      pipeline.push({
-        $match: {
-          averageRating: { $gte: parseFloat(minRating) },
-        },
+      const countPipeline = [
+        ...pipeline.slice(0, -2),
+        { $count: "totalResults" },
+      ];
+      const [reviewStats, countResult] = await Promise.all([
+        ReviewModel.aggregate(pipeline),
+        ReviewModel.aggregate(countPipeline),
+      ]);
+
+      const totalResults = countResult[0]?.totalResults || 0;
+      const metadata = generateMetadata(page, pageSize, totalResults);
+
+      return makeResponse(res, 201, "Success", {
+        result: reviewStats,
+        metadata,
       });
     }
-    // Add sorting and pagination
-    pipeline.push(
-      { $sort: { totalReviews: -1 } },
-      { $skip: skip },
-      { $limit: parseInt(pageSize) }
-    );
-    // Create count pipeline
-    const countPipeline = pipeline.slice(0, -2); // Remove skip and limit stages
-    countPipeline.push({
-      $count: "totalResults",
-    });
-
-    // Execute both pipelines
-    const [reviewStats, countResult] = await Promise.all([
-      ReviewModel.aggregate(pipeline),
-      ReviewModel.aggregate(countPipeline),
-    ]);
-
-    const totalResults = countResult[0]?.totalResults || 0;
-    const metadata = generateMetadata(page, pageSize, totalResults);
-
-    return makeResponse(res, 201, "Success", { result: reviewStats, metadata });
   } catch (err) {
     console.log(err);
     generateError(err, req, res, next);
