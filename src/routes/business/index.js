@@ -5,6 +5,7 @@ import {
   deleteBusiness,
   getBusinessAdminList,
   getBusinessList,
+  requestToAddBusiness,
   updateBusiness,
 } from "./business";
 
@@ -16,5 +17,6 @@ BusinessRouter.put("/admin/update", authAdmin, updateBusiness);
 BusinessRouter.delete("/admin/delete/:id", authAdmin, deleteBusiness);
 
 BusinessRouter.get("/list", getBusinessList);
+BusinessRouter.post("/request-to-add", requestToAddBusiness);
 
 export default BusinessRouter;

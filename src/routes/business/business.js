@@ -37,13 +37,45 @@ export const createBusiness = async (req, res, next) => {
   }
 };
 
+export const requestToAddBusiness = async (req, res, next) => {
+  try {
+    const businessParams = req.body;
+    businessParams.createdBy = "670c05b90d7bd1b566b7f5fd";
+    businessParams.status = false;
+
+    const { error } = validateBusiness(businessParams, { abortEarly: false });
+    if (error) return makeResponse(res, 400, error.details[0].message);
+
+    let business = await BusinessModal.findOne({
+      placeId: businessParams?.placeId,
+    }).lean();
+
+    if (business) {
+      return makeResponse(
+        res,
+        400,
+        "Business with same name and address already requested to add"
+      );
+    }
+    business = new BusinessModal(businessParams);
+
+    const { _id } = await business.save();
+    return makeResponse(res, 201, "Success", {
+      msg: "Business requested Successfully",
+      results: [{ id: _id }],
+    });
+  } catch (err) {
+    console.log(err);
+    generateError(err, req, res, next);
+  }
+};
 export const getBusinessList = async (req, res, next) => {
   try {
     const { id, searchText, name, industry, limit, page } = req.query;
     const { pageSize, skip } = generatePagination(limit, page);
     const sortBy = "updatedAt";
 
-    const filter = {};
+    const filter = { status: true };
 
     if (id) filter._id = new ObjectId(id);
     if (name) filter.name = new RegExp(name, "i");
