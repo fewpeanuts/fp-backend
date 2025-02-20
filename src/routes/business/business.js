@@ -184,7 +184,6 @@ export const updateBusiness = async (req, res, next) => {
     const { id, name, industry, location, status, placeId } = req.body;
 
     let business = await BusinessModal.findOne({ placeId: placeId });
-    console.log(business?.location, business?.placeId, "\n");
 
     // if (!business)
     //   return makeResponse(res, 400, "Invalid business id to update");

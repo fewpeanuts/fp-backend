@@ -157,7 +157,7 @@ export const updateUser = async (req, res, next) => {
     const userParams = req.body;
 
     let user = await UserModal.findById({ _id: userParams.id });
-    console.log(user);
+
     if (!user) return makeResponse(res, 400, "User does not exists ");
 
     //update user to DB

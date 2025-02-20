@@ -66,7 +66,7 @@ export const getReviewByBusinessId = async (req, res, next) => {
         .select("name industry location")
         .lean(),
     ]);
-    // console.log(reviews);
+
     let reviewSummary = processReviews(reviews, questions);
 
     return makeResponse(res, 201, "Success", {
